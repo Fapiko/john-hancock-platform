@@ -10,6 +10,7 @@ import (
 
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
 	"github.com/fapiko/john-hancock-platform/app/users"
+	"github.com/gorilla/handlers"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/sirupsen/logrus"
 
@@ -58,9 +59,14 @@ func main() {
 		log.WithError(err).Error("Error generating swagger")
 	}
 
+	corsHandler := handlers.CORS(
+		handlers.AllowedHeaders([]string{"Accept", "Accept-Language", "Content-Language", "Content-Type", "Origin"}),
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE"}))(muxRouter)
+
 	srv := &http.Server{
 		Addr:         ":11000",
-		Handler:      muxRouter,
+		Handler:      corsHandler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		ErrorLog:     stdLog.New(log.Writer(), "", 0),

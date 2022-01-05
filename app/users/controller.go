@@ -28,6 +28,15 @@ func (c *Controller) createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if createUserReq.Password == "" ||
+		createUserReq.FirstName == "" ||
+		createUserReq.LastName == "" ||
+		createUserReq.Email == "" {
+
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	log := logger.Get(r.Context())
 	user, err := c.UserRepository.CreateUser(r.Context(), createUserReq)
 	if err != nil {
