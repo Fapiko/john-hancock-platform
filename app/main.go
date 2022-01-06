@@ -54,6 +54,9 @@ func main() {
 	userController := users.NewController(userRepository)
 	userController.SetupRoutes(ctx, router)
 
+	sessionWorker := users.NewSessionWorker(userRepository)
+	go sessionWorker.Start(ctx)
+
 	err = router.GenerateAndExposeSwagger()
 	if err != nil {
 		log.WithError(err).Error("Error generating swagger")
