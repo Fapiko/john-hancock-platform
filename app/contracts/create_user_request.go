@@ -1,4 +1,4 @@
-package users
+package contracts
 
 type CreateUserRequest struct {
 	FirstName string `json:"firstName"`

@@ -1,9 +1,10 @@
-package users
+package repositories
 
 import (
 	"context"
 	"time"
 
+	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/google/uuid"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"golang.org/x/crypto/bcrypt"
@@ -13,13 +14,30 @@ var bcryptCost = 14
 
 type Repository interface {
 	CleanupSessions(ctx context.Context) (int, error)
-	CreateSession(ctx context.Context, userID string, session *Session) error
-	CreateUser(ctx context.Context, user *CreateUserRequest) (*User, error)
+	CreateSession(ctx context.Context, userID string, session *contracts.SessionResponse) error
+	CreateUser(ctx context.Context, user *contracts.CreateUserRequest) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 }
 
 type RepositoryNeo4j struct {
 	session neo4j.Session
+}
+
+type User struct {
+	ID        string
+	FirstName string
+	LastName  string
+	Email     string
+	Password  string
+}
+
+func (u *User) ToResponse() *contracts.UserResponse {
+	return &contracts.UserResponse{
+		ID:        u.ID,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+		Email:     u.Email,
+	}
 }
 
 func NewRepositoryNeo4j(session neo4j.Session) *RepositoryNeo4j {
@@ -31,7 +49,7 @@ func NewRepositoryNeo4j(session neo4j.Session) *RepositoryNeo4j {
 func (r *RepositoryNeo4j) CleanupSessions(ctx context.Context) (int, error) {
 	res, err := r.session.Run(
 		`MATCH (s:Session)
-		WHERE s.expires <>> datetime({timezone: 'UTC'})
+		WHERE s.expires <= datetime({timezone: 'UTC'})
 		DETACH DELETE s RETURN count(s) AS deleted`, map[string]interface{}{})
 
 	if err != nil {
@@ -43,7 +61,7 @@ func (r *RepositoryNeo4j) CleanupSessions(ctx context.Context) (int, error) {
 	return int(record.Values[0].(int64)), err
 }
 
-func (r *RepositoryNeo4j) CreateSession(ctx context.Context, userID string, session *Session) error {
+func (r *RepositoryNeo4j) CreateSession(ctx context.Context, userID string, session *contracts.SessionResponse) error {
 	cypher := `MATCH (u:User {uuid: $userID})
 				CREATE (u)-[:HAS_SESSION]->(s:Session {
 					uuid: $uuid,
@@ -59,7 +77,7 @@ func (r *RepositoryNeo4j) CreateSession(ctx context.Context, userID string, sess
 	return err
 }
 
-func (r *RepositoryNeo4j) CreateUser(ctx context.Context, createUser *CreateUserRequest) (*User, error) {
+func (r *RepositoryNeo4j) CreateUser(ctx context.Context, createUser *contracts.CreateUserRequest) (*User, error) {
 	passwordHashData, err := bcrypt.GenerateFromPassword([]byte(createUser.Password), bcryptCost)
 	if err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ import (
 	stdLog "log"
 
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
+	"github.com/fapiko/john-hancock-platform/app/repositories"
 	"github.com/fapiko/john-hancock-platform/app/users"
 	"github.com/gorilla/handlers"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
@@ -50,7 +51,7 @@ func main() {
 		_ = neo4jSession.Close()
 	}()
 
-	userRepository := users.NewRepositoryNeo4j(neo4jSession)
+	userRepository := repositories.NewRepositoryNeo4j(neo4jSession)
 	userController := users.NewController(userRepository)
 	userController.SetupRoutes(ctx, router)
 

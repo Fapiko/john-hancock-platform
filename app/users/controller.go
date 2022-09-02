@@ -9,7 +9,9 @@ import (
 
 	swagger "github.com/davidebianchi/gswagger"
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
+	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/persistence/graphdb"
+	"github.com/fapiko/john-hancock-platform/app/repositories"
 	"github.com/google/uuid"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"golang.org/x/crypto/bcrypt"
@@ -18,17 +20,17 @@ import (
 var sessionExpiration = 24 * time.Hour
 
 type Controller struct {
-	UserRepository Repository
+	UserRepository repositories.Repository
 }
 
-func NewController(userRepository Repository) *Controller {
+func NewController(userRepository repositories.Repository) *Controller {
 	return &Controller{
 		UserRepository: userRepository,
 	}
 }
 
 func (c *Controller) createUserHandler(w http.ResponseWriter, r *http.Request) {
-	createUserReq := &CreateUserRequest{}
+	createUserReq := &contracts.CreateUserRequest{}
 	if err := json.NewDecoder(r.Body).Decode(createUserReq); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -68,7 +70,7 @@ func (c *Controller) createUserHandler(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.Get(ctx)
-	loginRequest := &LoginUserRequest{}
+	loginRequest := &contracts.LoginUserRequest{}
 	if err := json.NewDecoder(r.Body).Decode(loginRequest); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -94,7 +96,7 @@ func (c *Controller) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := &Session{
+	session := &contracts.SessionResponse{
 		ID:        uuid.New().String(),
 		CreatedAt: time.Now(),
 		Expires:   time.Now().Add(sessionExpiration),
@@ -106,7 +108,7 @@ func (c *Controller) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respObject := &LoginUserResponse{
+	respObject := &contracts.LoginUserResponse{
 		Session: session,
 		User:    user.ToResponse(),
 	}
@@ -128,14 +130,14 @@ func (c *Controller) SetupRoutes(ctx context.Context, router *swagger.Router) {
 	_, err := router.AddRoute(http.MethodPost, "/users", c.createUserHandler, swagger.Definitions{
 		RequestBody: &swagger.ContentValue{
 			Content: swagger.Content{
-				"application/json": {Value: CreateUserRequest{}},
+				"application/json": {Value: contracts.CreateUserRequest{}},
 			},
 			Description: "Create a new user",
 		},
 		Responses: map[int]swagger.ContentValue{
 			http.StatusOK: {
 				Content: swagger.Content{
-					"application/json": {Value: UserResponse{}},
+					"application/json": {Value: contracts.UserResponse{}},
 				},
 				Description: "User created",
 			},
@@ -157,14 +159,14 @@ func (c *Controller) SetupRoutes(ctx context.Context, router *swagger.Router) {
 	_, err = router.AddRoute(http.MethodPost, "/users/auth", c.loginUserHandler, swagger.Definitions{
 		RequestBody: &swagger.ContentValue{
 			Content: swagger.Content{
-				"application/json": {Value: LoginUserRequest{}},
+				"application/json": {Value: contracts.LoginUserRequest{}},
 			},
 			Description: "Authenticates a user",
 		},
 		Responses: map[int]swagger.ContentValue{
 			http.StatusOK: {
 				Content: swagger.Content{
-					"application/json": {Value: UserResponse{}},
+					"application/json": {Value: contracts.UserResponse{}},
 				},
 				Description: "User authenticated",
 			},

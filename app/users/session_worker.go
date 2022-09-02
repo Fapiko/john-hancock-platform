@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
+	"github.com/fapiko/john-hancock-platform/app/repositories"
 )
 
 type SessionWorker struct {
 	running        bool
-	userRepository Repository
+	userRepository repositories.Repository
 }
 
-func NewSessionWorker(userRepository Repository) *SessionWorker {
+func NewSessionWorker(userRepository repositories.Repository) *SessionWorker {
 	return &SessionWorker{
 		running:        false,
 		userRepository: userRepository,

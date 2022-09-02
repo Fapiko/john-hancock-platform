@@ -1,4 +1,4 @@
-package users
+package contracts
 
 type UserResponse struct {
 	ID        string `json:"id"`
