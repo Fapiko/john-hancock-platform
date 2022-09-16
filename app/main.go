@@ -95,6 +95,7 @@ func main() {
 			[]string{
 				"Accept",
 				"Accept-Language",
+				"Authorization",
 				"Content-Language",
 				"Content-Type",
 				"Origin",

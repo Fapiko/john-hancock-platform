@@ -82,12 +82,14 @@ func (c *UserController) getCurrentUserHandler(w http.ResponseWriter, r *http.Re
 	user, err := c.UserRepository.GetUserBySessionID(r.Context(), sessionID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.WithError(err).Error("failed to get user by session id")
 		return
 	}
 
 	resp, err := json.Marshal(user.ToResponse())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.WithError(err).Error("failed to marshal user")
 		return
 	}
 
@@ -188,6 +190,12 @@ func (c *UserController) SetupRoutes(ctx context.Context, router *swagger.Router
 	// Get current user
 	var err error
 
+	securityRequirements := []openapi3.SecurityRequirement{
+		{
+			"apiKey": {},
+		},
+	}
+
 	operation := swagger.NewOperation()
 	operation.Security = &openapi3.SecurityRequirements{
 		{
@@ -198,11 +206,19 @@ func (c *UserController) SetupRoutes(ctx context.Context, router *swagger.Router
 		http.StatusOK, &openapi3.Response{},
 	)
 
-	_, err = router.AddRawRoute(
-		http.MethodGet,
-		"/user",
-		c.getCurrentUserHandler,
-		operation,
+	_, err = router.AddRoute(
+		http.MethodGet, "/user", c.getCurrentUserHandler, swagger.Definitions{
+			Responses: map[int]swagger.ContentValue{
+				http.StatusOK: {
+					Content: swagger.Content{
+						"application/json": {
+							Value: &contracts.UserResponse{},
+						},
+					},
+				},
+			},
+			SecurityRequirements: securityRequirements,
+		},
 	)
 
 	// Create User
