@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: John Hancock
+  description: |-
+    The backend REST API.
+
+  termsOfService:
+  contact:
+    email: fapiko@gmail.com
+  license:
+    name: MIT
+    url: https://github.com/Fapiko/john-hancock-platform/blob/master/LICENSE.md
+  version: 0.0.1
+externalDocs:
+  description: Github Repository
+  url: https://github.com/Fapiko/john-hancock-platform
+servers:
+  - url: http://localhost:11000
+tags:
+  - name: auth
+    description: Authentication endpoints
+paths:
+  /auth/oauth2:
+    post:
+      tags:
+        - auth
+      summary: Validate an oauth2 token
+      description: Validate an OAUTH2 token
+      operationId: updatePet
+      requestBody:
+        description: Update an existent pet in the store
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/validateOauthToken'
+        required: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/validateOauthToken'
+
+components:
+  schemas:
+    validateOauthToken:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        provider:
+          type: string
+          example: google

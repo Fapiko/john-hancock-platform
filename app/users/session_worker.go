@@ -10,10 +10,10 @@ import (
 
 type SessionWorker struct {
 	running        bool
-	userRepository repositories.Repository
+	userRepository repositories.UserRepository
 }
 
-func NewSessionWorker(userRepository repositories.Repository) *SessionWorker {
+func NewSessionWorker(userRepository repositories.UserRepository) *SessionWorker {
 	return &SessionWorker{
 		running:        false,
 		userRepository: userRepository,

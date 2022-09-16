@@ -5,79 +5,81 @@ import (
 	"time"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
+	"github.com/fapiko/john-hancock-platform/app/repositories/daos"
 	"github.com/google/uuid"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"golang.org/x/crypto/bcrypt"
 )
 
+var _ UserRepository = (*UserRepositoryNeo4j)(nil)
+
+const (
+	paramSessionID = "sessionID"
+)
+
 var bcryptCost = 14
+var sessionExpiration = 24 * time.Hour
 
-type Repository interface {
+type UserRepository interface {
 	CleanupSessions(ctx context.Context) (int, error)
-	CreateSession(ctx context.Context, userID string, session *contracts.SessionResponse) error
-	CreateUser(ctx context.Context, user *contracts.CreateUserRequest) (*User, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	CreateSession(ctx context.Context, userID string) (*contracts.SessionResponse, error)
+	CreateUser(ctx context.Context, user *contracts.CreateUserRequest) (*daos.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*daos.User, error)
+	GetUserBySessionID(ctx context.Context, sessionID string) (*daos.User, error)
 }
 
-type RepositoryNeo4j struct {
-	session neo4j.Session
+type UserRepositoryNeo4j struct {
+	driver neo4j.Driver
 }
 
-type User struct {
-	ID        string
-	FirstName string
-	LastName  string
-	Email     string
-	Password  string
-}
-
-func (u *User) ToResponse() *contracts.UserResponse {
-	return &contracts.UserResponse{
-		ID:        u.ID,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Email:     u.Email,
+func NewRepositoryNeo4j(driver neo4j.Driver) *UserRepositoryNeo4j {
+	return &UserRepositoryNeo4j{
+		driver: driver,
 	}
 }
 
-func NewRepositoryNeo4j(session neo4j.Session) *RepositoryNeo4j {
-	return &RepositoryNeo4j{
-		session: session,
-	}
-}
-
-func (r *RepositoryNeo4j) CleanupSessions(ctx context.Context) (int, error) {
-	res, err := r.session.Run(
-		`MATCH (s:Session)
+func (r *UserRepositoryNeo4j) CleanupSessions(ctx context.Context) (int, error) {
+	query := `MATCH (s:Session)
 		WHERE s.expires <= datetime({timezone: 'UTC'})
-		DETACH DELETE s RETURN count(s) AS deleted`, map[string]interface{}{})
+		DETACH DELETE s RETURN count(s) AS deleted`
 
-	if err != nil {
-		return 0, err
-	}
-
-	record, err := res.Single()
+	record, err := neo4jWriteTxSingle(ctx, r.driver, query)
 
 	return int(record.Values[0].(int64)), err
 }
 
-func (r *RepositoryNeo4j) CreateSession(ctx context.Context, userID string, session *contracts.SessionResponse) error {
+func (r *UserRepositoryNeo4j) CreateSession(
+	ctx context.Context,
+	userID string,
+) (*contracts.SessionResponse, error) {
+	sessionResp := &contracts.SessionResponse{
+		ID:        uuid.New().String(),
+		CreatedAt: time.Now(),
+		Expires:   time.Now().Add(sessionExpiration),
+	}
+
+	session := r.driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	cypher := `MATCH (u:User {uuid: $userID})
 				CREATE (u)-[:HAS_SESSION]->(s:Session {
 					uuid: $uuid,
 					createdAt: $createdAt, 
 					expires: $expires
 				})`
-	_, err := r.session.Run(cypher, map[string]interface{}{
-		"userID":    userID,
-		"uuid":      session.ID,
-		"createdAt": session.CreatedAt.In(time.UTC),
-		"expires":   session.Expires.In(time.UTC),
-	})
-	return err
+	_, err := session.Run(
+		cypher, map[string]interface{}{
+			"userID":    userID,
+			"uuid":      sessionResp.ID,
+			"createdAt": sessionResp.CreatedAt.In(time.UTC),
+			"expires":   sessionResp.Expires.In(time.UTC),
+		},
+	)
+	return sessionResp, err
 }
 
-func (r *RepositoryNeo4j) CreateUser(ctx context.Context, createUser *contracts.CreateUserRequest) (*User, error) {
+func (r *UserRepositoryNeo4j) CreateUser(
+	ctx context.Context,
+	createUser *contracts.CreateUserRequest,
+) (*daos.User, error) {
 	passwordHashData, err := bcrypt.GenerateFromPassword([]byte(createUser.Password), bcryptCost)
 	if err != nil {
 		return nil, err
@@ -85,19 +87,22 @@ func (r *RepositoryNeo4j) CreateUser(ctx context.Context, createUser *contracts.
 	passwordHash := string(passwordHashData)
 	userID := uuid.New().String()
 
+	session := r.driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	cypher := "CREATE (u:User {uuid: $uuid, firstName: $firstName, lastName: $lastName, email: $email, password: $password})"
-	_, err = r.session.Run(cypher, map[string]interface{}{
-		"uuid":      userID,
-		"firstName": createUser.FirstName,
-		"lastName":  createUser.LastName,
-		"email":     createUser.Email,
-		"password":  passwordHash,
-	})
+	_, err = session.Run(
+		cypher, map[string]interface{}{
+			"uuid":      userID,
+			"firstName": createUser.FirstName,
+			"lastName":  createUser.LastName,
+			"email":     createUser.Email,
+			"password":  passwordHash,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	user := &User{
+	user := &daos.User{
 		ID:        userID,
 		FirstName: createUser.FirstName,
 		LastName:  createUser.LastName,
@@ -107,11 +112,17 @@ func (r *RepositoryNeo4j) CreateUser(ctx context.Context, createUser *contracts.
 	return user, nil
 }
 
-func (r *RepositoryNeo4j) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+func (r *UserRepositoryNeo4j) GetUserByEmail(ctx context.Context, email string) (
+	*daos.User,
+	error,
+) {
+	session := r.driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	cypher := "MATCH (u:User {email: $email}) RETURN u"
-	result, err := r.session.Run(cypher, map[string]interface{}{
-		"email": email,
-	})
+	result, err := session.Run(
+		cypher, map[string]interface{}{
+			"email": email,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +133,24 @@ func (r *RepositoryNeo4j) GetUserByEmail(ctx context.Context, email string) (*Us
 	}
 
 	props := record.Values[0].(neo4j.Node).Props
-	user := &User{
-		ID:        props["uuid"].(string),
-		FirstName: props["firstName"].(string),
-		LastName:  props["lastName"].(string),
-		Email:     props["email"].(string),
-		Password:  props["password"].(string),
-	}
+	user := daos.NewUserFromProps(props)
 
 	return user, nil
+}
+
+func (r *UserRepositoryNeo4j) GetUserBySessionID(ctx context.Context, sessionID string) (
+	*daos.User,
+	error,
+) {
+	cypher := `MATCH (u:User)-[:HAS_SESSION]->(s:Session {uuid: $sessionID}) RETURN u`
+	params := map[string]interface{}{
+		paramSessionID: sessionID,
+	}
+
+	result, err := neo4jReadTxSingle(ctx, r.driver, cypher, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return daos.NewUserFromProps(result.Values[0].(neo4j.Node).Props), nil
 }
