@@ -1,6 +1,8 @@
 package daos
 
-import "github.com/fapiko/john-hancock-platform/app/contracts"
+import (
+	"github.com/fapiko/john-hancock-platform/app/contracts"
+)
 
 func NewUserFromProps(props map[string]interface{}) *User {
 	return &User{
@@ -13,7 +15,7 @@ func NewUserFromProps(props map[string]interface{}) *User {
 }
 
 type User struct {
-	ID        string
+	ID        string `gorm:"type:uuid;primary_key;"`
 	FirstName string
 	LastName  string
 	Email     string

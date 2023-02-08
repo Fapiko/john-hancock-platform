@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
 
 	stdLog "log"
 
+	"github.com/fapiko/john-hancock-platform/app/config"
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
 	"github.com/fapiko/john-hancock-platform/app/controllers"
 	"github.com/fapiko/john-hancock-platform/app/repositories"
@@ -16,6 +18,8 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/sirupsen/logrus"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 
 	swagger "github.com/davidebianchi/gswagger"
 	"github.com/davidebianchi/gswagger/apirouter"
@@ -26,6 +30,12 @@ import (
 func main() {
 	log := logrus.New()
 	ctx := logger.WithLogger(context.Background(), log)
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Panic(err)
+	}
+
 	muxRouter := mux.NewRouter()
 
 	muxRouter.PathPrefix("/swagger/").Handler(
@@ -61,21 +71,39 @@ func main() {
 		log.WithError(err).Error("Error creating router")
 	}
 
-	neo4jDriver, err := neo4j.NewDriver(
-		"bolt://localhost:7687",
-		neo4j.BasicAuth("neo4j", "pwd123", ""),
-	)
-	if err != nil {
-		log.WithError(err).Error("Error creating neo4j driver")
-	}
-	defer func() {
-		err := neo4jDriver.Close()
+	var userRepository repositories.UserRepository
+	if cfg.Database.Type == config.DB_TYPE_NEO4J {
+		neo4jDriver, err := neo4j.NewDriver(
+			"bolt://localhost:7687",
+			neo4j.BasicAuth("neo4j", "pwd123", ""),
+		)
 		if err != nil {
-			log.WithError(err).Error("Error closing neo4j driver")
+			log.WithError(err).Error("Error creating neo4j driver")
 		}
-	}()
+		defer func() {
+			err := neo4jDriver.Close()
+			if err != nil {
+				log.WithError(err).Error("Error closing neo4j driver")
+			}
+		}()
 
-	userRepository := repositories.NewRepositoryNeo4j(neo4jDriver)
+		userRepository = repositories.NewUserRepositoryNeo4j(neo4jDriver)
+	} else {
+		dsn := fmt.Sprintf(
+			"%s:%s@tcp(%s:3306)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.Database.Username,
+			cfg.Database.Password,
+			cfg.Database.Hostname,
+			cfg.Database.Name,
+		)
+
+		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			panic(err)
+		}
+
+		userRepository = repositories.NewUserRepositoryMySql(db)
+	}
 
 	authService := services.NewAuthService(userRepository)
 
