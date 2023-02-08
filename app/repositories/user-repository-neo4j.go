@@ -109,6 +109,9 @@ func (r *UserRepositoryNeo4j) GetUserByEmail(ctx context.Context, email string) 
 		},
 	)
 	if err != nil {
+		if err.Error() == NeoErrNoRecordsMsg {
+			return nil, ErrNoRecord
+		}
 		return nil, err
 	}
 

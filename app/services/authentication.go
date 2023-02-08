@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/repositories"
@@ -52,7 +53,7 @@ func (s *AuthServiceImpl) ValidateOAuthToken(
 	// See if user exists
 	user, err := s.userRepository.GetUserByEmail(ctx, payload.Claims["email"].(string))
 
-	if err != nil && err.Error() == repositories.NeoErrNoRecordsMsg {
+	if err != nil && errors.Is(err, repositories.ErrNoRecord) {
 		password, err := utils.GenerateRandomString(32)
 		if err != nil {
 			return nil, err
