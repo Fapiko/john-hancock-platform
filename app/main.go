@@ -71,6 +71,7 @@ func main() {
 		log.WithError(err).Error("Error creating router")
 	}
 
+	var certificateRepository repositories.CertRepository
 	var userRepository repositories.UserRepository
 	if cfg.Database.Type == config.DB_TYPE_NEO4J {
 		neo4jDriver, err := neo4j.NewDriver(
@@ -102,12 +103,21 @@ func main() {
 			panic(err)
 		}
 
+		certificateRepository = repositories.NewCertRepositoryMySQL(db)
 		userRepository = repositories.NewUserRepositoryMySql(db)
 	}
 
 	authService := services.NewAuthService(userRepository)
+	certificateService := services.NewCertificateServiceImpl()
 
+	caController := controllers.NewCertificateAuthorityController(
+		authService,
+		certificateService,
+		certificateRepository,
+	)
 	userController := controllers.NewController(userRepository, authService)
+
+	caController.SetupRoutes(ctx, router)
 	userController.SetupRoutes(ctx, router)
 
 	sessionWorker := users.NewSessionWorker(userRepository)

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/repositories"
@@ -11,6 +12,8 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
+var _ AuthService = (*AuthServiceImpl)(nil)
+
 type OAuthClaims struct {
 	Email     string
 	FirstName string
@@ -18,6 +21,7 @@ type OAuthClaims struct {
 }
 
 type AuthService interface {
+	GetUserForRequest(ctx context.Context, r *http.Request) (*daos.User, error)
 	ValidateOAuthToken(
 		ctx context.Context,
 		provider string,
@@ -27,6 +31,27 @@ type AuthService interface {
 
 type AuthServiceImpl struct {
 	userRepository repositories.UserRepository
+}
+
+func (s *AuthServiceImpl) GetUserForRequest(ctx context.Context, r *http.Request) (
+	*daos.User,
+	error,
+) {
+	sessionID := r.Header.Get("Authorization")
+	if sessionID == "" {
+		return nil, ErrUnauthorized
+	}
+
+	user, err := s.userRepository.GetUserBySessionID(ctx, sessionID)
+	if err != nil {
+		if err == repositories.ErrNoRecord {
+			return nil, ErrUnauthorized
+		}
+
+		return nil, err
+	}
+
+	return user, nil
 }
 
 func NewAuthService(userRepository repositories.UserRepository) AuthService {
