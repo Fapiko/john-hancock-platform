@@ -9,6 +9,7 @@ import (
 
 	stdLog "log"
 
+	"github.com/davidebianchi/gswagger/support/gorilla"
 	"github.com/fapiko/john-hancock-platform/app/config"
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
 	"github.com/fapiko/john-hancock-platform/app/controllers"
@@ -22,7 +23,6 @@ import (
 	"gorm.io/gorm"
 
 	swagger "github.com/davidebianchi/gswagger"
-	"github.com/davidebianchi/gswagger/apirouter"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 )
@@ -46,14 +46,14 @@ func main() {
 	)
 
 	router, err := swagger.NewRouter(
-		apirouter.NewGorillaMuxRouter(muxRouter), swagger.Options{
+		gorilla.NewRouter(muxRouter), swagger.Options{
 			Context: ctx,
 			Openapi: &openapi3.T{
 				Info: &openapi3.Info{
 					Title:   "John Hancock",
 					Version: "1.0.0",
 				},
-				Components: openapi3.Components{
+				Components: &openapi3.Components{
 					SecuritySchemes: openapi3.SecuritySchemes{
 						"apiKey": &openapi3.SecuritySchemeRef{
 							Value: &openapi3.SecurityScheme{
@@ -108,7 +108,7 @@ func main() {
 	}
 
 	authService := services.NewAuthService(userRepository)
-	certificateService := services.NewCertificateServiceImpl()
+	certificateService := services.NewCertificateServiceImpl(certificateRepository)
 
 	caController := controllers.NewCertificateAuthorityController(
 		authService,
@@ -123,7 +123,7 @@ func main() {
 	sessionWorker := users.NewSessionWorker(userRepository)
 	go sessionWorker.Start(ctx)
 
-	err = router.GenerateAndExposeSwagger()
+	err = router.GenerateAndExposeOpenapi()
 	if err != nil {
 		log.WithError(err).Error("Error generating swagger")
 	}

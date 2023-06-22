@@ -1,25 +1,31 @@
 package services
 
 import (
-	"crypto/x509"
-	"encoding/pem"
+	"context"
 	"testing"
 
+	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCertificateServiceImpl_GenerateCert(t *testing.T) {
-	service := NewCertificateServiceImpl()
-	certInfo, err := service.GenerateCert()
+	ctx := context.Background()
+	service := NewCertificateServiceImpl(nil)
+	_, err := service.GenerateCert(ctx, &contracts.CreateCARequest{}, CertTypeRootCA)
+
+	//block, _ := pem.Decode(cert)
+	//t.Log(block.Type)
 
 	assert.NoError(t, err)
 
-	data := pem.Block{Type: "CERTIFICATE", Bytes: certInfo.Cert.Raw}
-	certPEM := pem.EncodeToMemory(&data)
-
-	privData := pem.Block{"RSA PRIVATE KEY", nil, x509.MarshalPKCS1PrivateKey(certInfo.PrivateKey)}
-	privPEM := pem.EncodeToMemory(&privData)
-
-	t.Log(string(certPEM))
-	t.Log(string(privPEM))
+	//cert := pem.Decode(certInfo)
+	//
+	//data := pem.Block{Type: "CERTIFICATE", Bytes: cert.Bytes}
+	//certPEM := pem.EncodeToMemory(&data)
+	//
+	//privData := pem.Block{"RSA PRIVATE KEY", nil, x509.MarshalPKCS1PrivateKey(certInfo.PrivateKey)}
+	//privPEM := pem.EncodeToMemory(&privData)
+	//
+	//t.Log(string(certPEM))
+	//t.Log(string(privPEM))
 }

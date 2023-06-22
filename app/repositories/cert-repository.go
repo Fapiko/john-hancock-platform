@@ -14,4 +14,10 @@ type CertRepository interface {
 		data []byte,
 		certType string,
 	) (*daos.Certificate, error)
+
+	GetCertsByUserID(
+		ctx context.Context,
+		userId string,
+		certType string,
+	) ([]*daos.Certificate, error)
 }

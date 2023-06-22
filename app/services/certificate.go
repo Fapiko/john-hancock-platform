@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
+	"github.com/fapiko/john-hancock-platform/app/repositories"
 )
 
 var _ CertificateService = (*CertificateServiceImpl)(nil)
@@ -28,14 +29,22 @@ func (ct CertificateType) String() string {
 }
 
 type CertificateService interface {
+	GetUserCerts(
+		ctx context.Context,
+		userId string,
+		certType CertificateType,
+	) ([]*contracts.CertificateResponse, error)
 	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType) ([]byte, error)
 }
 
 type CertificateServiceImpl struct {
+	certRepository repositories.CertRepository
 }
 
-func NewCertificateServiceImpl() *CertificateServiceImpl {
-	return &CertificateServiceImpl{}
+func NewCertificateServiceImpl(certRepository repositories.CertRepository) *CertificateServiceImpl {
+	return &CertificateServiceImpl{
+		certRepository: certRepository,
+	}
 }
 
 type CertInfo struct {
@@ -101,4 +110,30 @@ func (c *CertificateServiceImpl) GenerateCert(
 	}
 
 	return certData, nil
+}
+
+func (c *CertificateServiceImpl) GetUserCerts(
+	ctx context.Context,
+	userId string,
+	certType CertificateType,
+) (
+	[]*contracts.CertificateResponse,
+	error,
+) {
+	daos, err := c.certRepository.GetCertsByUserID(ctx, userId, string(certType))
+	if err != nil {
+		return nil, err
+	}
+
+	response := make([]*contracts.CertificateResponse, len(daos))
+	for i, dao := range daos {
+		response[i] = &contracts.CertificateResponse{
+			ID:      dao.ID,
+			Name:    dao.Name,
+			Type:    dao.Type,
+			Created: dao.Created,
+		}
+	}
+
+	return response, nil
 }

@@ -7,9 +7,11 @@ import (
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 
 	swagger "github.com/davidebianchi/gswagger"
+	"github.com/davidebianchi/gswagger/support/gorilla"
 	"github.com/fapiko/john-hancock-platform/app/context/logger"
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/persistence/graphdb"
@@ -184,13 +186,16 @@ func (c *UserController) validateOauth2Token(w http.ResponseWriter, r *http.Requ
 	_, _ = w.Write(resp)
 }
 
-func (c *UserController) SetupRoutes(ctx context.Context, router *swagger.Router) {
+func (c *UserController) SetupRoutes(
+	ctx context.Context,
+	router *swagger.Router[gorilla.HandlerFunc, *mux.Route],
+) {
 	log := logger.Get(ctx)
 
 	// Get current user
 	var err error
 
-	securityRequirements := []openapi3.SecurityRequirement{
+	securityRequirements := swagger.SecurityRequirements{
 		{
 			"apiKey": {},
 		},
@@ -217,7 +222,7 @@ func (c *UserController) SetupRoutes(ctx context.Context, router *swagger.Router
 					},
 				},
 			},
-			SecurityRequirements: securityRequirements,
+			Security: securityRequirements,
 		},
 	)
 

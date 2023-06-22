@@ -40,3 +40,18 @@ func (c *CertRepositoryMySQL) CreateCert(
 	result := c.db.WithContext(ctx).Create(certDao)
 	return certDao, result.Error
 }
+
+func (c *CertRepositoryMySQL) GetCertsByUserID(
+	ctx context.Context,
+	userId string,
+	certType string,
+) ([]*daos.Certificate, error) {
+	certs := make([]*daos.Certificate, 0)
+	result := c.db.WithContext(ctx).Where(
+		"user_id = ? AND type = ?",
+		userId,
+		certType,
+	).Find(&certs)
+
+	return certs, result.Error
+}
