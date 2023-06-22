@@ -19,9 +19,9 @@ type CertificateType string
 
 const (
 	CertTypeRootCA         CertificateType = "root_ca"
-	CertTypeIntermediateCA                 = "intermediate_ca"
-	CertTypeServer                         = "server"
-	CertTypeClient                         = "client"
+	CertTypeIntermediateCA CertificateType = "intermediate_ca"
+	CertTypeServer         CertificateType = "server"
+	CertTypeClient         CertificateType = "client"
 )
 
 func (ct CertificateType) String() string {
@@ -33,7 +33,7 @@ type CertificateService interface {
 	GetUserCerts(
 		ctx context.Context,
 		userId string,
-		certType CertificateType,
+		certTypes []CertificateType,
 	) ([]*contracts.CertificateLightResponse, error)
 	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType) ([]byte, error)
 }
@@ -165,12 +165,17 @@ func (c *CertificateServiceImpl) GenerateCert(
 func (c *CertificateServiceImpl) GetUserCerts(
 	ctx context.Context,
 	userId string,
-	certType CertificateType,
+	certTypes []CertificateType,
 ) (
 	[]*contracts.CertificateLightResponse,
 	error,
 ) {
-	daos, err := c.certRepository.GetCertsByUserID(ctx, userId, string(certType))
+	strCertTypes := make([]string, len(certTypes))
+	for i, certType := range certTypes {
+		strCertTypes[i] = certType.String()
+	}
+
+	daos, err := c.certRepository.GetCertsByUserID(ctx, userId, strCertTypes)
 	if err != nil {
 		return nil, err
 	}

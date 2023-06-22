@@ -74,7 +74,11 @@ func (c *CertificateAuthorityController) getCAsHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	certs, err := c.certificateService.GetUserCerts(ctx, user.ID, services.CertTypeRootCA)
+	certs, err := c.certificateService.GetUserCerts(
+		ctx,
+		user.ID,
+		[]services.CertificateType{services.CertTypeRootCA, services.CertTypeIntermediateCA},
+	)
 	if err != nil {
 		log.WithError(err).Error("failed to get certs")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -107,7 +111,12 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		return
 	}
 
-	certData, err := c.certificateService.GenerateCert(ctx, req, services.CertTypeRootCA)
+	certType := services.CertTypeIntermediateCA
+	if req.ParentCA == "" {
+		certType = services.CertTypeRootCA
+	}
+
+	certData, err := c.certificateService.GenerateCert(ctx, req, certType)
 	if err != nil {
 		log.WithError(err).Error("failed to generate certificate")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -119,7 +128,8 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		user.ID,
 		req.Name,
 		certData,
-		services.CertTypeRootCA.String(),
+		certType.String(),
+		req.ParentCA,
 	)
 
 	resp := &contracts.CreateCAResponse{

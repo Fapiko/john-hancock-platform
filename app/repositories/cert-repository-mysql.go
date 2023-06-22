@@ -27,14 +27,16 @@ func (c *CertRepositoryMySQL) CreateCert(
 	name string,
 	data []byte,
 	certType string,
+	parentCA string,
 ) (*daos.Certificate, error) {
 	certDao := &daos.Certificate{
-		ID:      uuid.New().String(),
-		Name:    name,
-		Data:    data,
-		Type:    certType,
-		UserID:  userId,
-		Created: time.Now(),
+		ID:                uuid.New().String(),
+		Name:              name,
+		Data:              data,
+		Type:              certType,
+		UserID:            userId,
+		Created:           time.Now(),
+		ParentCertificate: parentCA,
 	}
 
 	result := c.db.WithContext(ctx).Create(certDao)
@@ -44,13 +46,13 @@ func (c *CertRepositoryMySQL) CreateCert(
 func (c *CertRepositoryMySQL) GetCertsByUserID(
 	ctx context.Context,
 	userId string,
-	certType string,
+	certTypes []string,
 ) ([]*daos.Certificate, error) {
 	certs := make([]*daos.Certificate, 0)
 	result := c.db.WithContext(ctx).Where(
-		"user_id = ? AND type = ?",
+		"user_id = ? AND type IN (?)",
 		userId,
-		certType,
+		certTypes,
 	).Find(&certs)
 
 	return certs, result.Error
