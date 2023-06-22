@@ -32,6 +32,38 @@ func NewCertificateAuthorityController(
 	}
 }
 
+func (c *CertificateAuthorityController) getCAHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	cert, err := c.certificateService.GetCert(ctx, id)
+	if err != nil {
+		log.WithError(err).Error("failed to get cert")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if cert.OwnerID != user.ID {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(cert)
+	if err != nil {
+		log.WithError(err).Error("failed to encode response")
+		return
+	}
+}
+
 func (c *CertificateAuthorityController) getCAsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.Get(ctx)
@@ -134,6 +166,20 @@ func (c *CertificateAuthorityController) SetupRoutes(
 			Querystring: swagger.ParameterValue{
 				"type": swagger.Parameter{
 					Description: "CA Type",
+				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodGet,
+		"/certificate-authorities/{id}",
+		c.getCAHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
+				"id": swagger.Parameter{
+					Description: "CA ID",
 				},
 			},
 			Security: securityRequirements,

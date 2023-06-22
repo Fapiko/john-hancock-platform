@@ -29,11 +29,12 @@ func (ct CertificateType) String() string {
 }
 
 type CertificateService interface {
+	GetCert(ctx context.Context, id string) (*contracts.CertificateResponse, error)
 	GetUserCerts(
 		ctx context.Context,
 		userId string,
 		certType CertificateType,
-	) ([]*contracts.CertificateResponse, error)
+	) ([]*contracts.CertificateLightResponse, error)
 	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType) ([]byte, error)
 }
 
@@ -50,6 +51,55 @@ func NewCertificateServiceImpl(certRepository repositories.CertRepository) *Cert
 type CertInfo struct {
 	Cert       *x509.Certificate
 	PrivateKey *rsa.PrivateKey
+}
+
+func (c *CertificateServiceImpl) GetCert(
+	ctx context.Context,
+	id string,
+) (*contracts.CertificateResponse, error) {
+	certDao, err := c.certRepository.GetCertByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	cert, err := x509.ParseCertificate(certDao.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	issuer := &contracts.PkixName{}
+	issuer.FromName(&cert.Issuer)
+
+	subject := &contracts.PkixName{}
+	subject.FromName(&cert.Subject)
+
+	extKeyUsage := make([]int, 0)
+	for _, usage := range cert.ExtKeyUsage {
+		extKeyUsage = append(extKeyUsage, int(usage))
+	}
+
+	certResponse := &contracts.CertificateResponse{
+		ID:                 certDao.ID,
+		OwnerID:            certDao.UserID,
+		Name:               certDao.Name,
+		Type:               certDao.Type,
+		Created:            certDao.Created,
+		SignatureAlgorithm: cert.SignatureAlgorithm.String(),
+		PublicKeyAlgorithm: cert.PublicKeyAlgorithm.String(),
+		Version:            cert.Version,
+		SerialNumber:       int(cert.SerialNumber.Int64()),
+		Issuer:             issuer,
+		Subject:            subject,
+		NotBefore:          cert.NotBefore,
+		NotAfter:           cert.NotAfter,
+		IsCA:               cert.IsCA,
+		MaxPathLen:         cert.MaxPathLen,
+		MaxPathLenZero:     cert.MaxPathLenZero,
+		KeyUsage:           int(cert.KeyUsage),
+		ExtKeyUsage:        extKeyUsage,
+	}
+
+	return certResponse, nil
 }
 
 func (c *CertificateServiceImpl) GenerateCert(
@@ -117,7 +167,7 @@ func (c *CertificateServiceImpl) GetUserCerts(
 	userId string,
 	certType CertificateType,
 ) (
-	[]*contracts.CertificateResponse,
+	[]*contracts.CertificateLightResponse,
 	error,
 ) {
 	daos, err := c.certRepository.GetCertsByUserID(ctx, userId, string(certType))
@@ -125,9 +175,9 @@ func (c *CertificateServiceImpl) GetUserCerts(
 		return nil, err
 	}
 
-	response := make([]*contracts.CertificateResponse, len(daos))
+	response := make([]*contracts.CertificateLightResponse, len(daos))
 	for i, dao := range daos {
-		response[i] = &contracts.CertificateResponse{
+		response[i] = &contracts.CertificateLightResponse{
 			ID:      dao.ID,
 			Name:    dao.Name,
 			Type:    dao.Type,

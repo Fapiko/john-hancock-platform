@@ -55,3 +55,12 @@ func (c *CertRepositoryMySQL) GetCertsByUserID(
 
 	return certs, result.Error
 }
+
+func (c *CertRepositoryMySQL) GetCertByID(ctx context.Context, id string) (
+	*daos.Certificate,
+	error,
+) {
+	cert := &daos.Certificate{}
+	result := c.db.WithContext(ctx).Where("id = ?", id).First(cert)
+	return cert, result.Error
+}
