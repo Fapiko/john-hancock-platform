@@ -116,7 +116,7 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		certType = services.CertTypeRootCA
 	}
 
-	certData, err := c.certificateService.GenerateCert(ctx, req, certType)
+	certData, err := c.certificateService.GenerateCert(ctx, req, certType, nil)
 	if err != nil {
 		log.WithError(err).Error("failed to generate certificate")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -167,6 +167,9 @@ func (c *CertificateAuthorityController) SetupRoutes(
 		c.createCAHandler,
 		swagger.Definitions{},
 	)
+	if err != nil {
+		log.WithError(err).Error("failed to setup route")
+	}
 
 	_, err = router.AddRoute(
 		http.MethodGet,

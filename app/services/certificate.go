@@ -35,7 +35,10 @@ type CertificateService interface {
 		userId string,
 		certTypes []CertificateType,
 	) ([]*contracts.CertificateLightResponse, error)
-	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType) ([]byte, error)
+	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType, PrivateKey) (
+		[]byte,
+		error,
+	)
 }
 
 type CertificateServiceImpl struct {
@@ -106,10 +109,8 @@ func (c *CertificateServiceImpl) GenerateCert(
 	ctx context.Context,
 	request *contracts.CreateCARequest,
 	certificateType CertificateType,
-) (
-	[]byte,
-	error,
-) {
+	key PrivateKey,
+) ([]byte, error) {
 	var maxPathLen = 0
 	if certificateType == CertTypeRootCA {
 		maxPathLen = 1 // TODO: Make this configurable - may want multiple intermediate CAs
@@ -143,17 +144,12 @@ func (c *CertificateServiceImpl) GenerateCert(
 		BasicConstraintsValid: true,
 	}
 
-	priv, err := rsa.GenerateKey(rand.Reader, 4096) // TODO: Make private key size configurable
-	if err != nil {
-		return nil, err
-	}
-
 	certData, err := x509.CreateCertificate(
 		rand.Reader,
 		&certTemplate,
 		&certTemplate,
-		&priv.PublicKey,
-		priv,
+		key.Public(),
+		key,
 	)
 	if err != nil {
 		return nil, err

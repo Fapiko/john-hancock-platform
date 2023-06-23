@@ -72,6 +72,7 @@ func main() {
 	}
 
 	var certificateRepository repositories.CertRepository
+	var keyRepository repositories.KeyRepository
 	var userRepository repositories.UserRepository
 	if cfg.Database.Type == config.DB_TYPE_NEO4J {
 		neo4jDriver, err := neo4j.NewDriver(
@@ -104,20 +105,24 @@ func main() {
 		}
 
 		certificateRepository = repositories.NewCertRepositoryMySQL(db)
+		keyRepository = repositories.NewKeyRepositoryMySQL(db)
 		userRepository = repositories.NewUserRepositoryMySql(db)
 	}
 
 	authService := services.NewAuthService(userRepository)
 	certificateService := services.NewCertificateServiceImpl(certificateRepository)
+	keyService := services.NewKeyServiceImpl(keyRepository)
 
 	caController := controllers.NewCertificateAuthorityController(
 		authService,
 		certificateService,
 		certificateRepository,
 	)
+	keyController := controllers.NewKeyController(authService, keyService)
 	userController := controllers.NewController(userRepository, authService)
 
 	caController.SetupRoutes(ctx, router)
+	keyController.SetupRoutes(ctx, router)
 	userController.SetupRoutes(ctx, router)
 
 	sessionWorker := users.NewSessionWorker(userRepository)
