@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"time"
 
@@ -20,8 +21,7 @@ type CertificateType string
 const (
 	CertTypeRootCA         CertificateType = "root_ca"
 	CertTypeIntermediateCA CertificateType = "intermediate_ca"
-	CertTypeServer         CertificateType = "server"
-	CertTypeClient         CertificateType = "client"
+	CertTypeCertificate    CertificateType = "certificate"
 )
 
 func (ct CertificateType) String() string {
@@ -35,7 +35,7 @@ type CertificateService interface {
 		userId string,
 		certTypes []CertificateType,
 	) ([]*contracts.CertificateLightResponse, error)
-	GenerateCert(
+	CreateCACert(
 		ctx context.Context,
 		request *contracts.CreateCARequest,
 		userID string,
@@ -44,12 +44,172 @@ type CertificateService interface {
 		[]byte,
 		error,
 	)
+	CreateCert(
+		ctx context.Context,
+		caID string,
+		request *contracts.CreateCertificateRequest,
+		userID string,
+	) (*contracts.CertificateLightResponse, error)
 }
 
 type CertificateServiceImpl struct {
 	certRepository repositories.CertRepository
 	keyRepository  repositories.KeyRepository
 	keyService     KeyService
+}
+
+func (c *CertificateServiceImpl) CreateCert(
+	ctx context.Context,
+	caID string,
+	request *contracts.CreateCertificateRequest,
+	userID string,
+) (*contracts.CertificateLightResponse, error) {
+	caCert, err := c.getX509CertificateForUser(ctx, caID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	caKeyId, err := c.certRepository.GetKeyIDByCertID(ctx, caID)
+	if err != nil {
+		return nil, err
+	}
+	caPrivateKey, err := c.keyService.GetDecryptedKeyForUser(
+		ctx,
+		caKeyId,
+		userID,
+		request.CAKeyPassword,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	certKey, err := c.keyService.GetDecryptedKeyForUser(
+		ctx,
+		request.KeyId,
+		userID,
+		request.KeyPassword,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	keyUsage, extKeyusage, err := c.keyUsages(request.KeyUsages)
+
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: request.CommonName,
+		},
+		DNSNames:              request.SubjectAlternativeNames,
+		NotBefore:             time.Now(),
+		NotAfter:              request.Expiration,
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		KeyUsage:              keyUsage,
+		ExtKeyUsage:           extKeyusage,
+	}
+
+	cert, err := x509.CreateCertificate(
+		rand.Reader,
+		&certTemplate,
+		caCert,
+		certKey.Public(),
+		caPrivateKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	dao, err := c.certRepository.CreateCert(
+		ctx,
+		userID,
+		request.Name,
+		cert,
+		CertTypeCertificate.String(),
+		caID,
+		request.KeyId,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &contracts.CertificateLightResponse{
+		ID:      dao.ID,
+		Name:    dao.Name,
+		Type:    dao.Type,
+		Created: dao.Created,
+	}, nil
+}
+
+func (c *CertificateServiceImpl) keyUsages(keyUsages []string) (
+	x509.KeyUsage,
+	[]x509.ExtKeyUsage,
+	error,
+) {
+	keyUsage := x509.KeyUsage(0)
+	extKeyUsage := make([]x509.ExtKeyUsage, 0)
+
+	for _, usage := range keyUsages {
+		switch usage {
+		case "digitalSignature":
+			keyUsage |= x509.KeyUsageDigitalSignature
+		case "contentCommitment":
+			keyUsage |= x509.KeyUsageContentCommitment
+		case "keyEncipherment":
+			keyUsage |= x509.KeyUsageKeyEncipherment
+		case "dataEncipherment":
+			keyUsage |= x509.KeyUsageDataEncipherment
+		case "keyAgreement":
+			keyUsage |= x509.KeyUsageKeyAgreement
+		case "certSign":
+			keyUsage |= x509.KeyUsageCertSign
+		case "crlSign":
+			keyUsage |= x509.KeyUsageCRLSign
+		case "encipherOnly":
+			keyUsage |= x509.KeyUsageEncipherOnly
+		case "decipherOnly":
+			keyUsage |= x509.KeyUsageDecipherOnly
+		case "serverAuth":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageServerAuth)
+		case "clientAuth":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageClientAuth)
+		case "codeSigning":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageCodeSigning)
+		case "emailProtection":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageEmailProtection)
+		case "ipsec_end_system":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageIPSECEndSystem)
+		case "ipsec_tunnel":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageIPSECTunnel)
+		case "ipsec_user":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageIPSECUser)
+		case "timeStamping":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageTimeStamping)
+		case "ocspSigning":
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsageOCSPSigning)
+		default:
+			return 0, nil, errors.New("invalid key usage")
+		}
+	}
+
+	return keyUsage, extKeyUsage, nil
+}
+
+func (c *CertificateServiceImpl) getX509CertificateForUser(
+	ctx context.Context,
+	id string,
+	userId string,
+) (*x509.Certificate, error) {
+	ca, err := c.certRepository.GetCertByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if ca.UserID != userId {
+		return nil, errors.New("certificate authority does not belong to user")
+	}
+
+	return x509.ParseCertificate(ca.Data)
 }
 
 func NewCertificateServiceImpl(
@@ -119,7 +279,7 @@ func (c *CertificateServiceImpl) GetCert(
 	return certResponse, nil
 }
 
-func (c *CertificateServiceImpl) GenerateCert(
+func (c *CertificateServiceImpl) CreateCACert(
 	ctx context.Context,
 	request *contracts.CreateCARequest,
 	userID string,
@@ -169,19 +329,19 @@ func (c *CertificateServiceImpl) GenerateCert(
 		parentCert = &certTemplate
 		parentKey = key
 	} else {
-		certDao, err := c.certRepository.GetCertByID(ctx, request.ParentCA)
+		parentCert, err = c.getX509CertificateForUser(ctx, request.ParentCA, userID)
 		if err != nil {
 			return nil, err
 		}
 
-		parentCert, err = x509.ParseCertificate(certDao.Data)
+		keyId, err := c.certRepository.GetKeyIDByCertID(ctx, request.ParentCA)
 		if err != nil {
 			return nil, err
 		}
 
 		parentKey, err = c.keyService.GetDecryptedKeyForUser(
 			ctx,
-			certDao.KeyID,
+			keyId,
 			userID,
 			request.ParentKeyPassword,
 		)

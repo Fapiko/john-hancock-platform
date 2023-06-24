@@ -68,3 +68,12 @@ func (c *CertRepositoryMySQL) GetCertByID(ctx context.Context, id string) (
 	result := c.db.WithContext(ctx).Where("id = ?", id).First(cert)
 	return cert, result.Error
 }
+
+func (c *CertRepositoryMySQL) GetKeyIDByCertID(ctx context.Context, certID string) (string, error) {
+	cert, err := c.GetCertByID(ctx, certID)
+	if err != nil {
+		return "", err
+	}
+
+	return cert.KeyID, nil
+}

@@ -116,7 +116,7 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		certType = services.CertTypeRootCA
 	}
 
-	certData, err := c.certificateService.GenerateCert(ctx, req, user.ID, certType)
+	certData, err := c.certificateService.CreateCACert(ctx, req, user.ID, certType)
 	if err != nil {
 		log.WithError(err).Error("failed to generate certificate")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -138,6 +138,41 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		Created: cert.Created,
 		Name:    cert.Name,
 		Type:    cert.Type,
+	}
+
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		log.WithError(err).Error("failed to encode response")
+		return
+	}
+}
+
+func (c *CertificateAuthorityController) createCertHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	vars := mux.Vars(r)
+	certAuthorityId := vars["caId"]
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	req := &contracts.CreateCertificateRequest{}
+	err = json.NewDecoder(r.Body).Decode(req)
+	if err != nil {
+		log.WithError(err).Error("failed to decode request body")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	resp, err := c.certificateService.CreateCert(ctx, certAuthorityId, req, user.ID)
+	if err != nil {
+		log.WithError(err).Error("failed to generate certificate")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	err = json.NewEncoder(w).Encode(resp)
@@ -193,6 +228,20 @@ func (c *CertificateAuthorityController) SetupRoutes(
 			PathParams: swagger.ParameterValue{
 				"id": swagger.Parameter{
 					Description: "CA ID",
+				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodPut,
+		"/certificate-authorities/{caId}",
+		c.createCertHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
+				"caId": swagger.Parameter{
+					Description: "Certificate Authority ID",
 				},
 			},
 			Security: securityRequirements,
