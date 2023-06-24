@@ -11,6 +11,7 @@ type CertificateResponse struct {
 	Name               string    `json:"name"`
 	Type               string    `json:"type"`
 	Created            time.Time `json:"created"`
+	KeyID              string    `json:"keyId"`
 	SignatureAlgorithm string    `json:"signatureAlgorithm"`
 	PublicKeyAlgorithm string    `json:"publicKeyAlgorithm"`
 	Version            int       `json:"version"`

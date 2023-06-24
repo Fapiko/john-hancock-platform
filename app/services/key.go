@@ -37,6 +37,12 @@ type KeyService interface {
 		*contracts.KeyLightResponse,
 		error,
 	)
+	GetDecryptedKeyForUser(
+		ctx context.Context,
+		keyId string,
+		userId string,
+		password string,
+	) (PrivateKey, error)
 	GetKeysForUser(
 		ctx context.Context,
 		userId string,
@@ -116,6 +122,45 @@ func (k *KeyServiceImpl) CreateKey(
 		Created:   dao.Created,
 		Algorithm: dao.Algorithm,
 	}, nil
+}
+
+func (k *KeyServiceImpl) GetDecryptedKeyForUser(
+	ctx context.Context,
+	keyId string,
+	userId string,
+	password string,
+) (PrivateKey, error) {
+	keyDao, err := k.keyRepository.GetKey(ctx, keyId)
+	if err != nil {
+		return nil, err
+	}
+
+	if keyDao.UserID != userId {
+		return nil, errors.New("key does not belong to user")
+	}
+
+	var data []byte
+	if password == "" {
+		data = keyDao.Data
+	} else {
+		pemBlock, _ := pem.Decode(keyDao.Data)
+		data, err = pemutil.DecryptPEMBlock(pemBlock, []byte(password))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	keyInt, err := x509.ParsePKCS8PrivateKey(data)
+	if err != nil {
+		return nil, err
+	}
+
+	key, ok := keyInt.(PrivateKey)
+	if !ok {
+		return nil, errors.New("invalid key type")
+	}
+
+	return key, nil
 }
 
 func (k *KeyServiceImpl) GetKeysForUser(

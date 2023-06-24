@@ -6,14 +6,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
-	"errors"
 	"math/big"
 	"time"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/repositories"
-	"go.step.sm/crypto/pemutil"
 )
 
 var _ CertificateService = (*CertificateServiceImpl)(nil)
@@ -52,15 +49,18 @@ type CertificateService interface {
 type CertificateServiceImpl struct {
 	certRepository repositories.CertRepository
 	keyRepository  repositories.KeyRepository
+	keyService     KeyService
 }
 
 func NewCertificateServiceImpl(
 	certRepository repositories.CertRepository,
 	keyRepository repositories.KeyRepository,
+	keyService KeyService,
 ) *CertificateServiceImpl {
 	return &CertificateServiceImpl{
 		certRepository: certRepository,
 		keyRepository:  keyRepository,
+		keyService:     keyService,
 	}
 }
 
@@ -100,6 +100,7 @@ func (c *CertificateServiceImpl) GetCert(
 		Name:               certDao.Name,
 		Type:               certDao.Type,
 		Created:            certDao.Created,
+		KeyID:              certDao.KeyID,
 		SignatureAlgorithm: cert.SignatureAlgorithm.String(),
 		PublicKeyAlgorithm: cert.PublicKeyAlgorithm.String(),
 		Version:            cert.Version,
@@ -136,34 +137,9 @@ func (c *CertificateServiceImpl) GenerateCert(
 		keyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 	}
 
-	keyDao, err := c.keyRepository.GetKey(ctx, request.KeyID)
+	key, err := c.keyService.GetDecryptedKeyForUser(ctx, request.KeyID, userID, request.KeyPassword)
 	if err != nil {
 		return nil, err
-	}
-
-	if keyDao.UserID != userID {
-		return nil, errors.New("key does not belong to user")
-	}
-
-	var data []byte
-	if request.KeyPassword == "" {
-		data = keyDao.Data
-	} else {
-		pemBlock, _ := pem.Decode(keyDao.Data)
-		data, err = pemutil.DecryptPEMBlock(pemBlock, []byte(request.KeyPassword))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	keyInt, err := x509.ParsePKCS8PrivateKey(data)
-	if err != nil {
-		return nil, err
-	}
-
-	key, ok := keyInt.(PrivateKey)
-	if !ok {
-		return nil, errors.New("invalid key type")
 	}
 
 	certTemplate := x509.Certificate{
@@ -187,12 +163,39 @@ func (c *CertificateServiceImpl) GenerateCert(
 		BasicConstraintsValid: true,
 	}
 
+	var parentCert *x509.Certificate
+	var parentKey PrivateKey
+	if request.ParentCA == "" {
+		parentCert = &certTemplate
+		parentKey = key
+	} else {
+		certDao, err := c.certRepository.GetCertByID(ctx, request.ParentCA)
+		if err != nil {
+			return nil, err
+		}
+
+		parentCert, err = x509.ParseCertificate(certDao.Data)
+		if err != nil {
+			return nil, err
+		}
+
+		parentKey, err = c.keyService.GetDecryptedKeyForUser(
+			ctx,
+			certDao.KeyID,
+			userID,
+			request.ParentKeyPassword,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	certData, err := x509.CreateCertificate(
 		rand.Reader,
 		&certTemplate,
-		&certTemplate,
+		parentCert,
 		key.Public(),
-		key,
+		parentKey,
 	)
 	if err != nil {
 		return nil, err

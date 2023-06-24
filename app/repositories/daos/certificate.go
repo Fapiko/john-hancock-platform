@@ -10,4 +10,5 @@ type Certificate struct {
 	Type              string
 	Created           time.Time
 	ParentCertificate string
+	KeyID             string
 }

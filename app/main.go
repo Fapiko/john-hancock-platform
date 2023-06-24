@@ -110,8 +110,12 @@ func main() {
 	}
 
 	authService := services.NewAuthService(userRepository)
-	certificateService := services.NewCertificateServiceImpl(certificateRepository, keyRepository)
 	keyService := services.NewKeyServiceImpl(keyRepository)
+	certificateService := services.NewCertificateServiceImpl(
+		certificateRepository,
+		keyRepository,
+		keyService,
+	)
 
 	caController := controllers.NewCertificateAuthorityController(
 		authService,

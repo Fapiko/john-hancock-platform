@@ -28,6 +28,7 @@ func (c *CertRepositoryMySQL) CreateCert(
 	data []byte,
 	certType string,
 	parentCA string,
+	keyId string,
 ) (*daos.Certificate, error) {
 	certDao := &daos.Certificate{
 		ID:                uuid.New().String(),
@@ -37,6 +38,7 @@ func (c *CertRepositoryMySQL) CreateCert(
 		UserID:            userId,
 		Created:           time.Now(),
 		ParentCertificate: parentCA,
+		KeyID:             keyId,
 	}
 
 	result := c.db.WithContext(ctx).Create(certDao)

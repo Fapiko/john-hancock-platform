@@ -130,6 +130,7 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		certData,
 		certType.String(),
 		req.ParentCA,
+		req.KeyID,
 	)
 
 	resp := &contracts.CreateCAResponse{

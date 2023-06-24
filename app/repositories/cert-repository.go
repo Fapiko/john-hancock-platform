@@ -14,6 +14,7 @@ type CertRepository interface {
 		data []byte,
 		certType string,
 		parentCA string,
+		keyId string,
 	) (*daos.Certificate, error)
 
 	GetCertByID(
