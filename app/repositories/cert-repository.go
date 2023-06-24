@@ -32,4 +32,9 @@ type CertRepository interface {
 		ctx context.Context,
 		certID string,
 	) (string, error)
+
+	GetCertsByParentCA(
+		ctx context.Context,
+		parentCA string,
+	) ([]*daos.Certificate, error)
 }

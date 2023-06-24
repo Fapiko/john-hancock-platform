@@ -15,6 +15,16 @@ type CertRepositoryMySQL struct {
 	db *gorm.DB
 }
 
+func (c *CertRepositoryMySQL) GetCertsByParentCA(
+	ctx context.Context,
+	parentCA string,
+) ([]*daos.Certificate, error) {
+	certs := make([]*daos.Certificate, 0)
+	result := c.db.WithContext(ctx).Where("parent_certificate = ?", parentCA).Find(&certs)
+
+	return certs, result.Error
+}
+
 func NewCertRepositoryMySQL(db *gorm.DB) *CertRepositoryMySQL {
 	return &CertRepositoryMySQL{
 		db: db,

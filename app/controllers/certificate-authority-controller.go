@@ -182,6 +182,103 @@ func (c *CertificateAuthorityController) createCertHandler(w http.ResponseWriter
 	}
 }
 
+func (c *CertificateAuthorityController) getCertificatesHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	vars := mux.Vars(r)
+	certAuthorityId := vars["caId"]
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	certs, err := c.certificateService.GetCertsByParentCAForUser(ctx, certAuthorityId, user.ID)
+	if err != nil {
+		log.WithError(err).Error("failed to get certs")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(certs)
+	if err != nil {
+		log.WithError(err).Error("failed to encode response")
+		return
+	}
+}
+
+func (c *CertificateAuthorityController) getCertificateHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	vars := mux.Vars(r)
+	//certAuthorityId := vars["caId"]
+	certId := vars["id"]
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	cert, err := c.certificateService.GetCert(ctx, certId)
+	if err != nil {
+		log.WithError(err).Error("failed to get cert")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if cert.OwnerID != user.ID {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(cert)
+	if err != nil {
+		log.WithError(err).Error("failed to encode response")
+		return
+	}
+}
+
+func (c *CertificateAuthorityController) downloadCertificateHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	vars := mux.Vars(r)
+	certId := vars["id"]
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	cert, err := c.certificateService.GetCert(ctx, certId)
+
+	certPem, err := c.certificateService.GetCertAsPEMForUser(ctx, certId, user.ID)
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename="+cert.Name+".pem")
+	w.Header().Set("Content-Transfer-Encoding", "binary")
+	w.Header().Set("Expires", "0")
+	_, err = w.Write([]byte(certPem))
+	if err != nil {
+		log.WithError(err).Error("failed to write cert")
+		return
+	}
+}
+
 func (c *CertificateAuthorityController) SetupRoutes(
 	ctx context.Context,
 	router *swagger.Router[gorilla.HandlerFunc, *mux.Route],
@@ -242,6 +339,56 @@ func (c *CertificateAuthorityController) SetupRoutes(
 			PathParams: swagger.ParameterValue{
 				"caId": swagger.Parameter{
 					Description: "Certificate Authority ID",
+				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodGet,
+		"/certificate-authorities/{caId}/certificates",
+		c.getCertificatesHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
+				"caId": swagger.Parameter{
+					Description: "Certificate Authority ID",
+				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodGet,
+		"/certificate-authorities/{caId}/certificates/{id}",
+		c.getCertificateHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
+				"caId": swagger.Parameter{
+					Description: "Certificate Authority ID",
+				},
+				"id": swagger.Parameter{
+					Description: "Certificate ID",
+				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodGet,
+		"/certificates/{id}/download",
+		c.downloadCertificateHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
+				"id": swagger.Parameter{
+					Description: "Certificate ID",
+				},
+			},
+			Querystring: swagger.ParameterValue{
+				"format": swagger.Parameter{
+					Description: "Download format type",
 				},
 			},
 			Security: securityRequirements,

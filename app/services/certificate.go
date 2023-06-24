@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"math/big"
 	"time"
@@ -16,46 +17,54 @@ import (
 
 var _ CertificateService = (*CertificateServiceImpl)(nil)
 
-type CertificateType string
-
-const (
-	CertTypeRootCA         CertificateType = "root_ca"
-	CertTypeIntermediateCA CertificateType = "intermediate_ca"
-	CertTypeCertificate    CertificateType = "certificate"
-)
-
-func (ct CertificateType) String() string {
-	return string(ct)
-}
-
-type CertificateService interface {
-	GetCert(ctx context.Context, id string) (*contracts.CertificateResponse, error)
-	GetUserCerts(
-		ctx context.Context,
-		userId string,
-		certTypes []CertificateType,
-	) ([]*contracts.CertificateLightResponse, error)
-	CreateCACert(
-		ctx context.Context,
-		request *contracts.CreateCARequest,
-		userID string,
-		certType CertificateType,
-	) (
-		[]byte,
-		error,
-	)
-	CreateCert(
-		ctx context.Context,
-		caID string,
-		request *contracts.CreateCertificateRequest,
-		userID string,
-	) (*contracts.CertificateLightResponse, error)
-}
-
 type CertificateServiceImpl struct {
 	certRepository repositories.CertRepository
 	keyRepository  repositories.KeyRepository
 	keyService     KeyService
+}
+
+func (c *CertificateServiceImpl) GetCertAsPEMForUser(
+	ctx context.Context,
+	id string,
+	userID string,
+) (string, error) {
+	cert, err := c.certRepository.GetCertByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	if cert.UserID != userID {
+		return "", errors.New("user does not have access to this certificate")
+	}
+
+	pb := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: cert.Data,
+	}
+
+	return string(pem.EncodeToMemory(pb)), nil
+}
+
+func (c *CertificateServiceImpl) GetCertsByParentCAForUser(
+	ctx context.Context,
+	parentCA string,
+	userID string,
+) ([]*contracts.CertificateLightResponse, error) {
+	certDaos, err := c.certRepository.GetCertsByParentCA(ctx, parentCA)
+	if err != nil {
+		return nil, err
+	}
+
+	var certResponses []*contracts.CertificateLightResponse
+	for _, cert := range certDaos {
+		if cert.UserID != userID {
+			continue
+		}
+
+		certResponses = append(certResponses, cert.ToLightResponse())
+	}
+
+	return certResponses, nil
 }
 
 func (c *CertificateServiceImpl) CreateCert(

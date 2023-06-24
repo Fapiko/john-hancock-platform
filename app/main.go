@@ -148,6 +148,7 @@ func main() {
 				"Origin",
 			},
 		),
+		handlers.ExposedHeaders([]string{"Content-Disposition"}),
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE"}),
 	)(muxRouter)
