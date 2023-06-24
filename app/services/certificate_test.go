@@ -11,7 +11,7 @@ import (
 func TestCertificateServiceImpl_GenerateCert(t *testing.T) {
 	ctx := context.Background()
 	service := NewCertificateServiceImpl(nil)
-	_, err := service.GenerateCert(ctx, &contracts.CreateCARequest{}, CertTypeRootCA, nil)
+	_, err := service.GenerateCert(ctx, &contracts.CreateCARequest{}, "", CertTypeRootCA)
 
 	//block, _ := pem.Decode(cert)
 	//t.Log(block.Type)

@@ -34,9 +34,13 @@ type KeyService interface {
 		algorithm contracts.KeyAlgorithm,
 		password string,
 	) (
-		*contracts.CreateKeyResponse,
+		*contracts.KeyLightResponse,
 		error,
 	)
+	GetKeysForUser(
+		ctx context.Context,
+		userId string,
+	) ([]*contracts.KeyLightResponse, error)
 }
 
 type KeyServiceImpl struct {
@@ -55,7 +59,7 @@ func (k *KeyServiceImpl) CreateKey(
 	name string,
 	algorithm contracts.KeyAlgorithm,
 	password string,
-) (*contracts.CreateKeyResponse, error) {
+) (*contracts.KeyLightResponse, error) {
 	var privKey any
 	var err error
 
@@ -106,10 +110,32 @@ func (k *KeyServiceImpl) CreateKey(
 		return nil, err
 	}
 
-	return &contracts.CreateKeyResponse{
+	return &contracts.KeyLightResponse{
 		ID:        dao.ID,
 		Name:      dao.Name,
 		Created:   dao.Created,
 		Algorithm: dao.Algorithm,
 	}, nil
+}
+
+func (k *KeyServiceImpl) GetKeysForUser(
+	ctx context.Context,
+	userId string,
+) ([]*contracts.KeyLightResponse, error) {
+	daos, err := k.keyRepository.GetKeysForUser(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]*contracts.KeyLightResponse, len(daos))
+	for i, dao := range daos {
+		keys[i] = &contracts.KeyLightResponse{
+			ID:        dao.ID,
+			Name:      dao.Name,
+			Created:   dao.Created,
+			Algorithm: dao.Algorithm,
+		}
+	}
+
+	return keys, nil
 }

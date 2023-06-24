@@ -116,7 +116,7 @@ func (c *CertificateAuthorityController) createCAHandler(w http.ResponseWriter, 
 		certType = services.CertTypeRootCA
 	}
 
-	certData, err := c.certificateService.GenerateCert(ctx, req, certType, nil)
+	certData, err := c.certificateService.GenerateCert(ctx, req, user.ID, certType)
 	if err != nil {
 		log.WithError(err).Error("failed to generate certificate")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -158,7 +158,6 @@ func (c *CertificateAuthorityController) SetupRoutes(
 		},
 	}
 
-	// Get current user
 	var err error
 
 	_, err = router.AddRoute(

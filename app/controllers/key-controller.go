@@ -71,11 +71,40 @@ func (c *KeyController) createKeyHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (c *KeyController) SetupRoutes(
+func (c *KeyController) getKeysHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	resp, err := c.keyService.GetKeysForUser(ctx, user.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (c *KeyController) RegisterRoutes(
 	ctx context.Context,
 	router *swagger.Router[gorilla.HandlerFunc, *mux.Route],
 ) {
 	var log = logger.Get(ctx)
+
+	securityRequirements := swagger.SecurityRequirements{
+		{
+			"apiKey": {},
+		},
+	}
+
 	var err error
 
 	_, err = router.AddRoute(http.MethodPut, "/keys", c.createKeyHandler, swagger.Definitions{})
@@ -87,7 +116,17 @@ func (c *KeyController) SetupRoutes(
 		http.MethodGet,
 		"/keys/types",
 		c.getKeyTypesHandler,
-		swagger.Definitions{},
+		swagger.Definitions{Security: securityRequirements},
+	)
+	if err != nil {
+		log.WithError(err).Fatal("failed to add route")
+	}
+
+	_, err = router.AddRoute(
+		http.MethodGet,
+		"/keys",
+		c.getKeysHandler,
+		swagger.Definitions{Security: securityRequirements},
 	)
 	if err != nil {
 		log.WithError(err).Fatal("failed to add route")

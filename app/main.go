@@ -110,7 +110,7 @@ func main() {
 	}
 
 	authService := services.NewAuthService(userRepository)
-	certificateService := services.NewCertificateServiceImpl(certificateRepository)
+	certificateService := services.NewCertificateServiceImpl(certificateRepository, keyRepository)
 	keyService := services.NewKeyServiceImpl(keyRepository)
 
 	caController := controllers.NewCertificateAuthorityController(
@@ -122,7 +122,7 @@ func main() {
 	userController := controllers.NewController(userRepository, authService)
 
 	caController.SetupRoutes(ctx, router)
-	keyController.SetupRoutes(ctx, router)
+	keyController.RegisterRoutes(ctx, router)
 	userController.SetupRoutes(ctx, router)
 
 	sessionWorker := users.NewSessionWorker(userRepository)

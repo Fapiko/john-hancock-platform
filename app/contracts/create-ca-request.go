@@ -12,4 +12,6 @@ type CreateCARequest struct {
 	StreetAddress string    `json:"streetAddress"`
 	Expiration    time.Time `json:"expiration"`
 	ParentCA      string    `json:"parentCA"`
+	KeyID         string    `json:"key"`
+	KeyPassword   string    `json:"keyPassword"`
 }

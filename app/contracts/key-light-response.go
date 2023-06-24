@@ -2,7 +2,7 @@ package contracts
 
 import "time"
 
-type CreateKeyResponse struct {
+type KeyLightResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Created   time.Time `json:"created"`

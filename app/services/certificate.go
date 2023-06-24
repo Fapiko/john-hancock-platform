@@ -6,11 +6,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
+	"errors"
 	"math/big"
 	"time"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 	"github.com/fapiko/john-hancock-platform/app/repositories"
+	"go.step.sm/crypto/pemutil"
 )
 
 var _ CertificateService = (*CertificateServiceImpl)(nil)
@@ -35,7 +38,12 @@ type CertificateService interface {
 		userId string,
 		certTypes []CertificateType,
 	) ([]*contracts.CertificateLightResponse, error)
-	GenerateCert(context.Context, *contracts.CreateCARequest, CertificateType, PrivateKey) (
+	GenerateCert(
+		ctx context.Context,
+		request *contracts.CreateCARequest,
+		userID string,
+		certType CertificateType,
+	) (
 		[]byte,
 		error,
 	)
@@ -43,11 +51,16 @@ type CertificateService interface {
 
 type CertificateServiceImpl struct {
 	certRepository repositories.CertRepository
+	keyRepository  repositories.KeyRepository
 }
 
-func NewCertificateServiceImpl(certRepository repositories.CertRepository) *CertificateServiceImpl {
+func NewCertificateServiceImpl(
+	certRepository repositories.CertRepository,
+	keyRepository repositories.KeyRepository,
+) *CertificateServiceImpl {
 	return &CertificateServiceImpl{
 		certRepository: certRepository,
+		keyRepository:  keyRepository,
 	}
 }
 
@@ -108,8 +121,8 @@ func (c *CertificateServiceImpl) GetCert(
 func (c *CertificateServiceImpl) GenerateCert(
 	ctx context.Context,
 	request *contracts.CreateCARequest,
+	userID string,
 	certificateType CertificateType,
-	key PrivateKey,
 ) ([]byte, error) {
 	var maxPathLen = 0
 	if certificateType == CertTypeRootCA {
@@ -121,6 +134,36 @@ func (c *CertificateServiceImpl) GenerateCert(
 	if certificateType == CertTypeRootCA || certificateType == CertTypeIntermediateCA {
 		isCA = true
 		keyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+	}
+
+	keyDao, err := c.keyRepository.GetKey(ctx, request.KeyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if keyDao.UserID != userID {
+		return nil, errors.New("key does not belong to user")
+	}
+
+	var data []byte
+	if request.KeyPassword == "" {
+		data = keyDao.Data
+	} else {
+		pemBlock, _ := pem.Decode(keyDao.Data)
+		data, err = pemutil.DecryptPEMBlock(pemBlock, []byte(request.KeyPassword))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	keyInt, err := x509.ParsePKCS8PrivateKey(data)
+	if err != nil {
+		return nil, err
+	}
+
+	key, ok := keyInt.(PrivateKey)
+	if !ok {
+		return nil, errors.New("invalid key type")
 	}
 
 	certTemplate := x509.Certificate{
