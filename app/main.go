@@ -122,7 +122,7 @@ func main() {
 		certificateService,
 		certificateRepository,
 	)
-	keyController := controllers.NewKeyController(authService, keyService)
+	keyController := controllers.NewKeyController(authService, keyService, keyRepository)
 	userController := controllers.NewController(userRepository, authService)
 
 	caController.SetupRoutes(ctx, router)
