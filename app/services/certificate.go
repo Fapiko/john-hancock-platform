@@ -23,6 +23,23 @@ type CertificateServiceImpl struct {
 	keyService     KeyService
 }
 
+func (c *CertificateServiceImpl) DeleteCertForUser(
+	ctx context.Context,
+	id string,
+	userID string,
+) error {
+	cert, err := c.certRepository.GetCertByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if cert.UserID != userID {
+		return ErrCertUnautorized
+	}
+
+	return c.certRepository.DeleteCertByID(ctx, id)
+}
+
 func (c *CertificateServiceImpl) GetCertAsPEMForUser(
 	ctx context.Context,
 	id string,
@@ -34,7 +51,7 @@ func (c *CertificateServiceImpl) GetCertAsPEMForUser(
 	}
 
 	if cert.UserID != userID {
-		return "", errors.New("user does not have access to this certificate")
+		return "", ErrCertUnautorized
 	}
 
 	pb := &pem.Block{
@@ -102,20 +119,20 @@ func (c *CertificateServiceImpl) CreateCert(
 		return nil, err
 	}
 
-	keyUsage, extKeyusage, err := c.keyUsages(request.KeyUsages)
+	keyUsage, extKeyUsage, err := c.keyUsages(request.KeyUsages)
 
 	certTemplate := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
 			CommonName: request.CommonName,
 		},
-		DNSNames:              request.SubjectAlternativeNames,
+		DNSNames:              append(request.SubjectAlternativeNames, request.CommonName),
 		NotBefore:             time.Now(),
 		NotAfter:              request.Expiration,
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 		KeyUsage:              keyUsage,
-		ExtKeyUsage:           extKeyusage,
+		ExtKeyUsage:           extKeyUsage,
 	}
 
 	cert, err := x509.CreateCertificate(
@@ -281,11 +298,85 @@ func (c *CertificateServiceImpl) GetCert(
 		IsCA:               cert.IsCA,
 		MaxPathLen:         cert.MaxPathLen,
 		MaxPathLenZero:     cert.MaxPathLenZero,
-		KeyUsage:           int(cert.KeyUsage),
-		ExtKeyUsage:        extKeyUsage,
+		KeyUsage:           c.keyUsagesStr(cert.KeyUsage),
+		ExtKeyUsage:        c.extKeyUsagesStr(cert.ExtKeyUsage),
+		DNSNames:           cert.DNSNames,
 	}
 
 	return certResponse, nil
+}
+
+func (c *CertificateServiceImpl) keyUsagesStr(keyUsage x509.KeyUsage) []string {
+	keyUsages := make([]string, 0)
+	if keyUsage&x509.KeyUsageDigitalSignature == 1 {
+		keyUsages = append(keyUsages, "digitalSignature")
+	}
+	if keyUsage&x509.KeyUsageContentCommitment == 1 {
+		keyUsages = append(keyUsages, "contentCommitment")
+	}
+	if keyUsage&x509.KeyUsageKeyEncipherment == 1 {
+		keyUsages = append(keyUsages, "keyEncipherment")
+	}
+	if keyUsage&x509.KeyUsageDataEncipherment == 1 {
+		keyUsages = append(keyUsages, "dataEncipherment")
+	}
+	if keyUsage&x509.KeyUsageKeyAgreement == 1 {
+		keyUsages = append(keyUsages, "keyAgreement")
+	}
+	if keyUsage&x509.KeyUsageCertSign == 1 {
+		keyUsages = append(keyUsages, "certSign")
+	}
+	if keyUsage&x509.KeyUsageCRLSign == 1 {
+		keyUsages = append(keyUsages, "crlSign")
+	}
+	if keyUsage&x509.KeyUsageEncipherOnly == 1 {
+		keyUsages = append(keyUsages, "encipherOnly")
+	}
+	if keyUsage&x509.KeyUsageDecipherOnly == 1 {
+		keyUsages = append(keyUsages, "decipherOnly")
+	}
+
+	return keyUsages
+}
+
+func (c *CertificateServiceImpl) extKeyUsagesStr(extKeyUsage []x509.ExtKeyUsage) []string {
+	extKeyUsages := make([]string, 0)
+	for _, usage := range extKeyUsage {
+		switch usage {
+		case x509.ExtKeyUsageAny:
+			extKeyUsages = append(extKeyUsages, "any")
+		case x509.ExtKeyUsageServerAuth:
+			extKeyUsages = append(extKeyUsages, "serverAuth")
+		case x509.ExtKeyUsageClientAuth:
+			extKeyUsages = append(extKeyUsages, "clientAuth")
+		case x509.ExtKeyUsageCodeSigning:
+			extKeyUsages = append(extKeyUsages, "codeSigning")
+		case x509.ExtKeyUsageEmailProtection:
+			extKeyUsages = append(extKeyUsages, "emailProtection")
+		case x509.ExtKeyUsageIPSECEndSystem:
+			extKeyUsages = append(extKeyUsages, "ipsecEndSystem")
+		case x509.ExtKeyUsageIPSECTunnel:
+			extKeyUsages = append(extKeyUsages, "ipsecTunnel")
+		case x509.ExtKeyUsageIPSECUser:
+			extKeyUsages = append(extKeyUsages, "ipsecUser")
+		case x509.ExtKeyUsageTimeStamping:
+			extKeyUsages = append(extKeyUsages, "timeStamping")
+		case x509.ExtKeyUsageOCSPSigning:
+			extKeyUsages = append(extKeyUsages, "ocspSigning")
+		case x509.ExtKeyUsageMicrosoftServerGatedCrypto:
+			extKeyUsages = append(extKeyUsages, "microsoftServerGatedCrypto")
+		case x509.ExtKeyUsageNetscapeServerGatedCrypto:
+			extKeyUsages = append(extKeyUsages, "netscapeServerGatedCrypto")
+		case x509.ExtKeyUsageMicrosoftCommercialCodeSigning:
+			extKeyUsages = append(extKeyUsages, "microsoftCommercialCodeSigning")
+		case x509.ExtKeyUsageMicrosoftKernelCodeSigning:
+			extKeyUsages = append(extKeyUsages, "microsoftKernelCodeSigning")
+		default:
+			extKeyUsages = append(extKeyUsages, "unknown")
+		}
+	}
+
+	return extKeyUsages
 }
 
 func (c *CertificateServiceImpl) CreateCACert(

@@ -15,6 +15,12 @@ type CertRepositoryMySQL struct {
 	db *gorm.DB
 }
 
+func (c *CertRepositoryMySQL) DeleteCertByID(ctx context.Context, id string) error {
+	result := c.db.WithContext(ctx).Delete(&daos.Certificate{ID: id})
+
+	return result.Error
+}
+
 func (c *CertRepositoryMySQL) GetCertsByParentCA(
 	ctx context.Context,
 	parentCA string,

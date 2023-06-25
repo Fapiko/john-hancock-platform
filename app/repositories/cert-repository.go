@@ -17,6 +17,11 @@ type CertRepository interface {
 		keyId string,
 	) (*daos.Certificate, error)
 
+	DeleteCertByID(
+		ctx context.Context,
+		id string,
+	) error
+
 	GetCertByID(
 		ctx context.Context,
 		id string,

@@ -140,10 +140,11 @@ func (k *KeyServiceImpl) GetDecryptedKeyForUser(
 	}
 
 	var data []byte
+	pemBlock, _ := pem.Decode(keyDao.Data)
 	if password == "" {
-		data = keyDao.Data
+		data = pemBlock.Bytes
 	} else {
-		pemBlock, _ := pem.Decode(keyDao.Data)
+
 		data, err = pemutil.DecryptPEMBlock(pemBlock, []byte(password))
 		if err != nil {
 			return nil, err

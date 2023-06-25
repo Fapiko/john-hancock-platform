@@ -20,11 +20,12 @@ type CertificateResponse struct {
 	Subject            *PkixName `json:"subject"`
 	NotBefore          time.Time `json:"notBefore"`
 	NotAfter           time.Time `json:"notAfter"`
-	KeyUsage           int       `json:"keyUsage"`
-	ExtKeyUsage        []int     `json:"extKeyUsage"`
+	KeyUsage           []string  `json:"keyUsage"`
+	ExtKeyUsage        []string  `json:"extKeyUsage"`
 	IsCA               bool      `json:"isCA"`
 	MaxPathLen         int       `json:"maxPathLen"`
 	MaxPathLenZero     bool      `json:"maxPathLenZero"`
+	DNSNames           []string  `json:"sanDNSNames"`
 }
 
 type PkixName struct {

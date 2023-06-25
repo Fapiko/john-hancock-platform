@@ -248,6 +248,32 @@ func (c *CertificateAuthorityController) getCertificateHandler(
 	}
 }
 
+func (c *CertificateAuthorityController) deleteCertificateHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+	log := logger.Get(ctx)
+
+	vars := mux.Vars(r)
+	certId := vars["id"]
+
+	user, err := c.authService.GetUserForRequest(ctx, r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	err = c.certificateService.DeleteCertForUser(ctx, certId, user.ID)
+	if err != nil {
+		log.WithError(err).Error("failed to delete cert")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (c *CertificateAuthorityController) downloadCertificateHandler(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -361,13 +387,24 @@ func (c *CertificateAuthorityController) SetupRoutes(
 
 	_, err = router.AddRoute(
 		http.MethodGet,
-		"/certificate-authorities/{caId}/certificates/{id}",
+		"/certificates/{id}",
 		c.getCertificateHandler,
 		swagger.Definitions{
 			PathParams: swagger.ParameterValue{
-				"caId": swagger.Parameter{
-					Description: "Certificate Authority ID",
+				"id": swagger.Parameter{
+					Description: "Certificate ID",
 				},
+			},
+			Security: securityRequirements,
+		},
+	)
+
+	_, err = router.AddRoute(
+		http.MethodDelete,
+		"/certificates/{id}",
+		c.deleteCertificateHandler,
+		swagger.Definitions{
+			PathParams: swagger.ParameterValue{
 				"id": swagger.Parameter{
 					Description: "Certificate ID",
 				},

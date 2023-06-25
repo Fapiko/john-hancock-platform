@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"github.com/fapiko/john-hancock-platform/app/contracts"
 )
@@ -14,11 +15,14 @@ const (
 	CertTypeCertificate    CertificateType = "certificate"
 )
 
+var ErrCertUnautorized = errors.New("user does not have access to this certificate")
+
 func (ct CertificateType) String() string {
 	return string(ct)
 }
 
 type CertificateService interface {
+	DeleteCertForUser(ctx context.Context, id string, userID string) error
 	GetCert(ctx context.Context, id string) (*contracts.CertificateResponse, error)
 	GetCertAsPEMForUser(ctx context.Context, id string, userID string) (string, error)
 	GetUserCerts(
